@@ -1,0 +1,188 @@
+/*
+ * MC2_Test.c
+ *
+ *  Created on: Oct 24, 2022
+ *      Author: kollaly
+ */
+
+#include "uart.h"
+#include "Timer.h"
+#include "std_types.h"
+#include <util/delay.h>
+#include <avr/io.h>
+#include "twi.h"
+#include "external_eeprom.h"
+#include "DC_motor.h"
+#include "Buzzer.h"
+
+#define CONTROL_ECU_ADD	(0x1)
+#define EEPROM_STORE_ADDREESS	(0x00)
+#define ENTER_BUTTON 13
+#define PASS_SIZE 5
+#define UNLOCK_TIME 15
+#define LOCK_TIME 15
+#define HOLD_TIME 3
+#define MAX_WRONG_PASS_TRIALS 3
+#define BUZZER_TIME 60
+#define MOTOR_PERIOD 15
+#define HOLD_MOTOR_PERIOD 3
+
+#define READY_TO_SEND 0x10
+#define READY_TO_RECIEVE 0x11
+#define PASSWORDS_ARE_SAME (1u)
+#define PASSWORDS_ARE_DIFF (0u)
+#define PASS_IS_CORRECT 0x12
+
+
+#define CHANGE_PASS_REQUEST		(0x18)
+#define DOOR_UNLOCK				(0x25)
+#define WRONG_PASS				(0x30)
+#define CHANGE_PASS				(0X31)
+
+
+uint8 wrongPassTrials = 0;
+uint8 g_seconds = 0 ;
+uint8 recievedPass[PASS_SIZE];
+uint8 storePass[PASS_SIZE];
+
+void setPassFirstTime(void);
+uint8 checkPasswordMatch(uint8 *pass1,uint8 *pass2);
+void savePassInEEProm(void);
+void timer1HandlerCallBack(void);
+void openDoorOperation(void);
+void updateStoredPassword(void);
+
+int main (void){
+	uint8 i ;
+
+	SREG |=(1<<SREG_I);
+	UART_ConfigType uart_config = {PARITY_DISABLED,OneStopBit,DataBits_8,9600};
+	UART_init(&uart_config);
+	Timer_ConfigType timer1_config = {Timer1,0,7813,COMPARE_MODE,DONT_CARE,PRESCALER_1024};
+	Timer_init(&timer1_config);
+	TWI_ConfigType twi_config = {CONTROL_ECU_ADD,PRESCALER__1,0x02};
+	TWI_init(&twi_config);
+	//Timer_ConfigType timer0_config = {Timer0,0,255,FAST_PWM_MODE,DONT_CARE,PRESCALER_8};
+	//Timer_init(&timer0_config);
+	Timer_setCallBack(timer1HandlerCallBack,Timer1);
+	DcMotor_init();
+	Buzzer_init();
+	setPassFirstTime();
+	uint8 recived_info = 0;
+
+	while(1){
+		if (UART_recieveByte() == READY_TO_SEND){
+			for(i=0;i<PASS_SIZE;i++){
+				recievedPass[i] = UART_recieveByte();
+				_delay_ms(100);
+			}
+			recived_info = UART_recieveByte();
+	}
+		if (recived_info == '+') {
+			if (checkPasswordMatch(storePass, recievedPass)== PASSWORDS_ARE_SAME) {
+				UART_sendByte(DOOR_UNLOCK);
+				openDoorOperation();
+			} else {
+				UART_sendByte(WRONG_PASS);
+				wrongPassTrials++;
+				if (wrongPassTrials == MAX_WRONG_PASS_TRIALS) {
+					Buzzer_on();
+					g_seconds = 0;
+					while (g_seconds < BUZZER_TIME){}
+					Buzzer_off();
+					wrongPassTrials = 0;
+				}
+			}
+		}
+		else if (recived_info == '-') {
+			if (checkPasswordMatch(storePass, recievedPass) == PASSWORDS_ARE_SAME) {
+				UART_sendByte(CHANGE_PASS);
+				setPassFirstTime();
+			} else {
+				UART_sendByte(WRONG_PASS);
+			}
+
+
+}
+}
+}
+
+
+void setPassFirstTime(void){
+	uint8 i ;
+
+	uint8 checkPass[PASS_SIZE];
+	uint8 checkFlag = 0;
+	while(checkFlag == 0){
+		while (UART_recieveByte() != READY_TO_SEND){}
+		UART_sendByte(READY_TO_RECIEVE);
+		for(i=0;i<PASS_SIZE;i++){
+			recievedPass[i] = UART_recieveByte();
+			_delay_ms(100);
+		}
+		while (UART_recieveByte() != READY_TO_SEND){}
+		UART_sendByte(READY_TO_RECIEVE);
+		for(i=0;i<PASS_SIZE;i++){
+			checkPass[i] = UART_recieveByte();
+			_delay_ms(100);
+		}
+
+		if ( checkPasswordMatch(recievedPass,checkPass) == PASSWORDS_ARE_SAME){
+			UART_sendByte(READY_TO_SEND);
+			UART_sendByte(PASSWORDS_ARE_SAME);
+			savePassInEEProm();
+			checkFlag = 1;
+		}
+		else if ( checkPasswordMatch(recievedPass,checkPass) == PASSWORDS_ARE_DIFF){
+			UART_sendByte(READY_TO_SEND);
+			UART_sendByte(PASSWORDS_ARE_DIFF);
+		}
+		}
+	}
+
+
+
+uint8 checkPasswordMatch(uint8 *pass1,uint8 *pass2){
+	updateStoredPassword();
+	uint8 i ;
+
+	for (i = 0; i < PASS_SIZE; i++) {
+		if (pass1[i] != pass2[i]) {
+			return PASSWORDS_ARE_DIFF;
+		}
+	}
+	return PASSWORDS_ARE_SAME;
+}
+
+void savePassInEEProm(void) {
+	uint8 i ;
+	for (i = 0; i < PASS_SIZE; i++) {
+		EEPROM_writeByte(EEPROM_STORE_ADDREESS + i, recievedPass[i]);
+		_delay_ms(100);
+	}
+}
+
+void openDoorOperation(void){
+	g_seconds = 0;
+	DcMotor_Rotate(CW);
+	while(g_seconds < MOTOR_PERIOD){}
+	g_seconds = 0;
+	DcMotor_Rotate(STOP);
+	while(g_seconds < HOLD_MOTOR_PERIOD){}
+	g_seconds = 0;
+	DcMotor_Rotate(ACW);
+	while(g_seconds < MOTOR_PERIOD){}
+	DcMotor_Rotate(STOP);
+}
+
+void updateStoredPassword(void){
+	uint8 i ;
+	for (i=0;i<PASS_SIZE;i++){
+		EEPROM_readByte(EEPROM_STORE_ADDREESS+i, storePass+i);
+	}
+}
+
+
+void timer1HandlerCallBack(void){
+	g_seconds++;
+}

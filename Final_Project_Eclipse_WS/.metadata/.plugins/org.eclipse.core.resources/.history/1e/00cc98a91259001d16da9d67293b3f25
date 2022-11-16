@@ -1,0 +1,165 @@
+/*
+ * MC1_Test.c
+ *
+ *  Created on: Oct 24, 2022
+ *      Author: kollaly
+ */
+
+
+#include "main1F.h"
+
+uint8 input_pass[PASS_SIZE];
+uint8 pass_cmp_result = 0 ;
+uint8 key = 0 , i = 0 , j = 0;
+uint8 numberOfWrongPass = 0 ;
+uint8 g_seconds = 0 ;
+
+
+
+int main(void)
+{
+
+	SREG |=(1<<SREG_I);
+	UART_ConfigType uart_config = {PARITY_DISABLED,OneStopBit,DataBits_8,9600};
+	UART_init(&uart_config);
+	Timer_ConfigType timer_config = {Timer1,0,7813,COMPARE_MODE,DONT_CARE,PRESCALER_8};
+	Timer_init(&timer_config);
+	Timer_setCallBack(timer1HandlerCallBack,Timer1);
+	LCD_init();
+	setPassFirstTime();
+	mainOptions();
+	uint8 recived_info = 0;
+	key = 0 ;
+
+
+	while(1){
+		key = KEYPAD_getPressedKey();
+		if ( key == '+')
+		{
+			LCD_clearScreen();
+			LCD_displayString("ah :");
+			getPass(input_pass);
+			UART_sendByte(READY_TO_SEND);
+			for(j = 0 ; j < PASS_SIZE ; j++){
+				UART_sendByte(input_pass[j]);
+				_delay_ms(100);
+			}
+			recived_info = UART_recieveByte();
+			if(recived_info == PASS_IS_CORRECT){
+				openDoorOperation();
+			}
+			else if ( recived_info == PASSWORDS_ARE_DIFF){
+				LCD_clearScreen();
+				LCD_displayString("Pass is Wrong !");
+				_delay_ms(500);
+			}
+			mainOptions();
+
+		}
+		else if ( key == '-'){
+			LCD_clearScreen();
+			LCD_displayString("Plz Enter pass :");
+			getPass(input_pass);
+			UART_sendByte(READY_TO_SEND);
+			for(j = 0 ; j < PASS_SIZE ; j++){
+				UART_sendByte(input_pass[j]);
+				_delay_ms(100);
+			}
+			recived_info = UART_recieveByte();
+			if(recived_info == PASS_IS_CORRECT){
+				setPassFirstTime();
+				LCD_clearScreen();
+			}
+			else if (recived_info == PASSWORDS_ARE_DIFF){
+				LCD_clearScreen();
+				LCD_displayString("Pass is Wrong !");
+				_delay_ms(500);
+			}
+			mainOptions();
+		}
+	}
+
+}
+
+
+
+void mainOptions(void){
+	LCD_clearScreen();
+	LCD_displayStringRowColumn(0,0,"+ : Open Door ");
+	LCD_displayStringRowColumn(0,1,"- : Change Pass ");
+}
+
+void setPassFirstTime(void){
+	while (pass_cmp_result == PASSWORDS_ARE_DIFF){
+	LCD_clearScreen();
+	LCD_displayString("Plz Enter pass :");
+	getPass(input_pass);
+	UART_sendByte(READY_TO_SEND);
+	while(UART_recieveByte() != READY_TO_RECIEVE){}
+	for(j = 0 ; j < PASS_SIZE ; j++){
+		UART_sendByte(input_pass[j]);
+		_delay_ms(100);
+	}
+
+	LCD_clearScreen();
+	LCD_displayStringRowColumn(0,0,"RE-Enter pass :");
+	getPass(input_pass);
+	UART_sendByte(READY_TO_SEND);
+	while(UART_recieveByte() != READY_TO_RECIEVE){}
+	for(j = 0 ; j < PASS_SIZE ; j++){
+		UART_sendByte(input_pass[j]);
+		_delay_ms(100);
+	}
+/*
+	while (UART_recieveByte() != READY_TO_SEND);
+	pass_cmp_result = UART_recieveByte();
+
+	if(pass_cmp_result == PASSWORDS_ARE_DIFF){
+		LCD_clearScreen();
+		LCD_displayStringRowColumn(0,0,"passwords are diff ");
+		_delay_ms(500);
+	}
+}
+	pass_cmp_result = PASSWORDS_ARE_DIFF ;   // to be used in passwaord change*/
+}
+}
+
+void getPass(uint8 *pass){
+	LCD_moveCursor(1,0);
+	while(i != 5)
+	    {
+	    	key = KEYPAD_getPressedKey();
+
+			if((key >= 0) && (key <= 9))
+			{
+				*(pass + i) = key;
+				LCD_intgerToString(pass[i]);
+				i++;
+			}
+			_delay_ms(500);
+	    }
+	    key = 0 ;
+	    while (KEYPAD_getPressedKey() != ENTER_BUTTON){}
+
+}
+
+void openDoorOperation(void){
+	g_seconds = 0 ;
+	LCD_clearScreen();
+	LCD_displayStringRowColumn(0, 0, "unlocking door");
+	while(g_seconds < UNLOCK_TIME){}
+	g_seconds = 0 ;
+	LCD_clearScreen();
+	LCD_displayStringRowColumn(0, 0, "door is open ");
+	while(g_seconds < HOLD_TIME){}
+	g_seconds = 0 ;
+	LCD_clearScreen();
+	LCD_displayStringRowColumn(0, 0, "locking door ");
+	while(g_seconds < LOCK_TIME){}
+}
+
+void timer1HandlerCallBack(void){
+	g_seconds++;
+}
+
+

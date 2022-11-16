@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Delete 2 resources" deleteContents="false" description="Delete 2 resources" element1="/Final_Project_MC2_Control_ECU/PWM.c" element2="/Final_Project_MC2_Control_ECU/PWM.h" flags="7" id="org.eclipse.ltk.core.refactoring.delete.resources" resources="2" stamp="1667322491230"/>
+</session>

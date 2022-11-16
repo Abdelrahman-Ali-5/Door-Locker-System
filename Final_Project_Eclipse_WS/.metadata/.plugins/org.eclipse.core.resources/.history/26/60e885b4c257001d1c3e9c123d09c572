@@ -1,0 +1,43 @@
+/*
+ * mainF.h
+ *
+ *  Created on: Oct 29, 2022
+ *      Author: kollaly
+ */
+
+#ifndef MAIN1F_H_
+#define MAIN1F_H_
+
+#include "lcd.h"
+#include "uart.h"
+#include "keypad.h"
+#include "Timer.h"
+#include "std_types.h"
+#include <util/delay.h>
+#include <avr/io.h>
+
+#define ENTER_BUTTON 13
+#define PASS_SIZE 5
+#define UNLOCK_TIME 15
+#define LOCK_TIME 15
+#define HOLD_TIME 3
+#define READY_TO_SEND 0x10
+#define READY_TO_RECIEVE 0x11
+#define PASSWORDS_ARE_SAME (1u)
+#define PASSWORDS_ARE_DIFF (0u)
+#define PASS_IS_CORRECT 0x12
+
+
+uint8 input_pass[PASS_SIZE];
+uint8 pass_cmp_result = 0 ;
+uint8 key = 0 , i = 0 , j = 0;
+uint8 numberOfWrongPass = 0 ;
+uint8 g_seconds = 0 ;
+
+void getPass(uint8 *pass);
+void setPassFirstTime(void);
+void mainOptions(void);
+void openDoorOperation(void);
+void timer1HandlerCallBack(void);
+
+#endif /* MAIN1F_H_ */
